@@ -13,7 +13,7 @@ remote.send <- function(rSocket,data) {
   send.raw.string(rSocket, data)
    msg <- receive.string(rSocket)
   
-   # print(msg)
+    print(msg)
 }
 
 # Function to PULL data from ZeroMQ MT4 EA PUSH socket.
@@ -63,95 +63,6 @@ connect.socket(reqSocket,"tcp://localhost:5555")
 
 # Connect to PULL Socket on port 5556
 connect.socket(pullSocket,"tcp://localhost:5556")
-
-# main cycle
-while(T)
-{
-  print("No active positions, ready to continue..")
-  
-  remote.send(reqSocket, "time")
-  time <- receive.string(pullSocket)
-  time <- align.time(as.POSIXct(time, format = "%Y.%m.%d %H:%M:%S"), 1800)
-  print("This is a rounded time")
-  print(time)
-  
-  remote.send(reqSocket, "time")
-  time2 <- receive.string(pullSocket)
-  time2 <- as.POSIXct(time2, format = "%Y.%m.%d %H:%M:%S")
-  print("This is a current time")
-  print(time2)
-  
-  while (time >= time2)
-  {
-    remote.send(reqSocket, "time")
-    time2 <- as.POSIXct(receive.string(pullSocket), format = "%Y.%m.%d %H:%M:%S")
-    
-  }
-  remote.send(reqSocket, "time")
-  time3 <- as.POSIXct(receive.string(pullSocket), format = "%Y.%m.%d %H:%M:%S")
-  
-  print("This is the time, the algo has been waiting for")
-  print(time2)
-  print("This is a current time")
-  print(time3)
-  
-  remote.send(reqSocket, "data")
-  rec_data <- receive.string(pullSocket)
-  df <- create_df(rec_data)
-  
-  close_t1 <- df[nrow(df), "Close"]
-  predicted_values <- neural_net(df)
-  
-  request <- management_system(close_t1, predicted_values[1], predicted_values[2], predicted_values[3])
-  if(!is.null(request))
-  {
-    remote.send(reqSocket, request)
-  }
-  else
-  {
-    print("Nothing to buy or sell")
-  }
-  
-  print("----------------------------------------")
-  print("")
-}
-
-# side cycles
-while(T)
-{
-  remote.send(reqSocket, "time")
-  time <- receive.string(pullSocket)
-  time <- align.time(as.POSIXct(time, format = "%Y.%m.%d %H:%M:%S"), 1800)
-  print("This is a rounded time")
-  print(time)
-  
-  remote.send(reqSocket, "time")
-  time2 <- receive.string(pullSocket)
-  time2 <- as.POSIXct(time2, format = "%Y.%m.%d %H:%M:%S")
-  print("This is a current time")
-  print(time2)
-  
-  while (time >= time2)
-  {
-    remote.send(reqSocket, "time")
-    time2 <- as.POSIXct(receive.string(pullSocket), format = "%Y.%m.%d %H:%M:%S")
-    
-  }
-  remote.send(reqSocket, "time")
-  time3 <- as.POSIXct(receive.string(pullSocket), format = "%Y.%m.%d %H:%M:%S")
-  
-  print("This is the time, the algo has been waiting for")
-  print(time2)
-  print("This is a current time")
-  print(time3)
-  
-  remote.send(reqSocket, "data")
-  rec_data <- receive.string(pullSocket)
-  df <- create_df(rec_data)
-  
-  close_t1 <- df[nrow(df), "Close"]
-  break
-}
 
 neural_net <- function(df) 
 {
@@ -210,21 +121,21 @@ management_system <- function(close_t1, p_high, p_low, p_close)
   
   if(abs(close_t1 - p_high) > (HL * abs(close_t1 - p_low)))
   {
-    order_type <- "LONG"
-    size <- get_position_size(order_type, p_high, p_low)
-    sl <- p_low
-    tp <- p_high
+    order_type <- "long"
+    size <- round(get_position_size(order_type, p_high, p_low),2)
+    sl <- round(p_low, 5)
+    tp <- round(p_high, 5)
 
-    mess <- paste("BUY", size, sl, tp, sep = "|")
+    mess <- paste("buy", size, sl, tp, sep = "|")
   }
   else if (HL * abs(close_t1 - p_high) < (abs(close_t1 - p_low)))
   {
-    order_type <- "SHORT"
-    size <- get_position_size(order_type, p_high, p_low)
-    sl <- p_high
-    tp <- p_low
+    order_type <- "short"
+    size <- round(get_position_size(order_type, p_high, p_low), 2)
+    sl <- round(p_high, 5)
+    tp <- round(p_low, 5)
     
-    mess <- paste("SELL", size, sl, tp, sep = "|")
+    mess <- paste("sell", size, sl, tp, sep = "|")
   }
   
   return(mess)
@@ -234,13 +145,14 @@ get_position_size <- function(order_type, p_high, p_low)
 {
   remote.send(reqSocket, "balance")
   balance <- as.numeric(receive.string(pullSocket))
-  
+  print(paste(balance, "fce", sep = " "))
   remote.send(reqSocket, "actual_price")
   actual_price <- as.numeric(receive.string(pullSocket))
+  print(paste(actual_price, "fce", sep = " "))
   
   position_size <- 0
   
-  if(order_type == "LONG")
+  if(order_type == "long")
   {
     dollar_risk <- balance * risk
     pips_sl <- (actual_price - p_low)/0.0001
@@ -252,7 +164,7 @@ get_position_size <- function(order_type, p_high, p_low)
     position_size <- min(position_size_sl, position_size_tp)
     
   }
-  else if(order_type == "SHORT")
+  else if(order_type == "short")
   {
     dollar_risk <- balance * risk
     pips_sl <- (p_high - actual_price)/0.0001
@@ -267,6 +179,78 @@ get_position_size <- function(order_type, p_high, p_low)
   return(position_size)
 }
 
+# main cycle
+while(T)
+{
+  print("No active positions, ready to continue..")
+  
+  remote.send(reqSocket, "time")
+  time <- receive.string(pullSocket)
+  time <- align.time(as.POSIXct(time, format = "%Y.%m.%d %H:%M:%S"), 1800)
+  print("This is a rounded time")
+  print(time)
+  
+  remote.send(reqSocket, "time")
+  time2 <- receive.string(pullSocket)
+  time2 <- as.POSIXct(time2, format = "%Y.%m.%d %H:%M:%S")
+  print("This is a current time")
+  print(time2)
+  
+  while (time >= time2)
+  {
+    remote.send(reqSocket, "time")
+    time2 <- as.POSIXct(receive.string(pullSocket), format = "%Y.%m.%d %H:%M:%S")
+    
+  }
+  remote.send(reqSocket, "time")
+  time3 <- as.POSIXct(receive.string(pullSocket), format = "%Y.%m.%d %H:%M:%S")
+  
+  print("This is the time, the algo has been waiting for")
+  print(time2)
+  print("This is a current time")
+  print(time3)
+  
+  remote.send(reqSocket, "data")
+  rec_data <- receive.string(pullSocket)
+  df <- create_df(rec_data)
+  
+  close_t1 <- df[nrow(df), "Close"]
+  predicted_values <- neural_net(df)
+  
+  request <- management_system(close_t1, predicted_values[1], predicted_values[2], predicted_values[3])
+  print(request)
+  print(class(request))
+  
+  remote.send(reqSocket, "time")
+  time_m <- receive.string(pullSocket)
+  print(time_m)
+   
+  if(!is.null(request))
+  {
+    remote.send(reqSocket, request)
+    a <- receive.string(pullSocket)
+    print(a)
+    break
+  }
+  else
+  {
+    print("no buy or sell")
+  }
+ 
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 remote.send(reqSocket, "total_positions")
 total_positions <- as.numeric(receive.string(pullSocket))
 
@@ -276,3 +260,56 @@ while(total_positions > 0)
   total_positions <- as.numeric(receive.string(pullSocket))
   print("Waiting for closing current position")
 }
+
+
+
+
+# side cycles
+while(T)
+{
+  remote.send(reqSocket, "time")
+  time <- receive.string(pullSocket)
+  time <- align.time(as.POSIXct(time, format = "%Y.%m.%d %H:%M:%S"), 1800)
+  print("This is a rounded time")
+  print(time)
+  
+  remote.send(reqSocket, "time")
+  time2 <- receive.string(pullSocket)
+  time2 <- as.POSIXct(time2, format = "%Y.%m.%d %H:%M:%S")
+  print("This is a current time")
+  print(time2)
+  
+  while (time >= time2)
+  {
+    remote.send(reqSocket, "time")
+    time2 <- as.POSIXct(receive.string(pullSocket), format = "%Y.%m.%d %H:%M:%S")
+    
+  }
+  remote.send(reqSocket, "time")
+  time3 <- as.POSIXct(receive.string(pullSocket), format = "%Y.%m.%d %H:%M:%S")
+  
+  print("This is the time, the algo has been waiting for")
+  print(time2)
+  print("This is a current time")
+  print(time3)
+  
+  remote.send(reqSocket, "data")
+  rec_data <- receive.string(pullSocket)
+  df <- create_df(rec_data)
+  
+  close_t1 <- df[nrow(df), "Close"]
+  predicted_values <- neural_net(df)
+  
+  request <- management_system(close_t1, predicted_values[1], predicted_values[2], predicted_values[3])
+  break
+}
+
+while(TRUE)
+{
+  Sys.sleep(10)
+  remote.send(reqSocket, "buy-0.5-1.12345-1.12345")
+  balance <- receive.string(pullSocket)
+  print(balance)
+  break
+}
+
